@@ -28,6 +28,8 @@ jobs:
     name: 构建 · ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
+    # Intel 版 macOS 镜像为可选矩阵项，失败不影响整体发布
+    continue-on-error: ${{ matrix.experimental || false }}
 
     strategy:
       fail-fast: false
@@ -48,12 +50,13 @@ jobs:
             artifact: netwatch-linux-x86_64
             shell: bash
             build: bash packaging/build_linux.sh
-          # 需要 Intel 版 macOS 时，取消下面一行的注释（GitHub 已提供 Intel 镜像）：
-          # - name: macOS (Intel)
-          #   os: macos-15-intel
-          #   artifact: netwatch-macos-x86_64
-          #   shell: bash
-          #   build: bash packaging/build_macos.sh
+          # Intel 版 macOS（可选）：该镜像为实验性队列，失败不影响其它平台发布
+          - name: macOS (Intel)
+            os: macos-15-intel
+            artifact: netwatch-macos-x86_64
+            shell: bash
+            build: bash packaging/build_macos.sh
+            experimental: true
 
     steps:
       - name: 检出代码

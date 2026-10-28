@@ -36,8 +36,9 @@ tray = ["pystray>=0.19", "Pillow>=9.0"]
 dev = ["pyinstaller>=6.0"]
 
 [project.urls]
-Homepage = "https://github.com/netwatch-tool/netwatch"
-Issues = "https://github.com/netwatch-tool/netwatch/issues"
+Homepage = "https://github.com/che77a38/NetworkTester"
+Issues = "https://github.com/che77a38/NetworkTester/issues"
+Changelog = "https://github.com/che77a38/NetworkTester/blob/main/CHANGELOG.md"
 
 [project.gui-scripts]
 netwatch = "netwatch.main:main"
@@ -45,6 +46,3 @@ netwatch = "netwatch.main:main"
 [tool.setuptools]
 packages = ["netwatch"]
 include-package-data = true
-
-[tool.setuptools.package-data]
-netwatch = ["py.typed"]

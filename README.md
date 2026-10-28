@@ -71,8 +71,8 @@ Server酱、Telegram、SMTP 邮件、自定义 Webhook）发送提醒，支持�
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/<your-org>/netwatch.git
-cd netwatch
+git clone https://github.com/che77a38/NetworkTester.git
+cd NetworkTester
 
 # 2. 运行（无需安装任何第三方依赖）
 python -m netwatch
@@ -82,26 +82,45 @@ python -m netwatch
 
 ### 关于 `pip install`
 
-NetWatch **运行时只依赖标准库**，因此最稳妥、最推荐的方式就是上面的源码运行：
+NetWatch **运行时只依赖标准库**（`pyproject.toml` 中 `dependencies = []`），因此最稳妥、最推荐的方式
+就是上面的源码运行：
 
 ```bash
 python -m netwatch
 ```
 
-> 说明：本仓库暂未附带 `pyproject.toml`。该文件由发布流程维护，一旦仓库提供了它，安装方式即为：
->
-> ```bash
-> pip install .          # 从源码安装
-> pip install netwatch   # 从 PyPI 安装（若已上架）
-> ```
->
-> 安装后同样可以用 `netwatch` 命令或 `python -m netwatch` 启动。
-> 在 `pyproject.toml` 落地之前，请直接使用源码方式，不要依赖 `pip install .`。
+仓库已提供 `pyproject.toml`，需要安装到系统环境时也可以走标准打包流程：
+
+```bash
+# 从源码安装（推荐）
+pip install .
+
+# 带上系统托盘图标支持（pystray + Pillow）
+pip install ".[tray]"
+
+# 带上打包工具（pyinstaller）
+pip install ".[dev]"
+
+# 全部开发依赖
+pip install -r requirements-dev.txt
+```
+
+安装后会注册 `netwatch` 命令（Windows 下为 `netwatch.exe`，无控制台窗口），
+与 `python -m netwatch` 等价：
+
+```bash
+netwatch          # 启动图形界面
+netwatch --check  # 单次检测
+```
+
+> 提示：Windows 下若想保留控制台窗口以便查看日志，可用 `python -m netwatch` 启动。
+> 若 PyPI 上架后，可直接 `pip install netwatch` 安装。
 
 ### 安装可选的托盘图标支持
 
 ```bash
-python -m pip install pystray
+python -m pip install pystray        # 仅装 pystray
+python -m pip install ".[tray]"       # 或安装 pyproject.toml 里的 tray 附加依赖
 ```
 
 未安装 `pystray` 时，关闭窗口会退化为「隐藏到后台运行」，功能不受影响。
