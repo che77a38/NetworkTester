@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "手动发布时使用的版本号（例如 v1.0.0），留空则只构建产物"
+        description: "手动发布时使用的版本号（例如 v1.0.0），留空则更新滚动版 latest"
         required: false
         type: string
 
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. 三个平台并行构建
+  # 1. 三个平台并行构建（Windows / macOS ARM / Linux）
   # ---------------------------------------------------------------------------
   build:
     name: 构建 · ${{ matrix.name }}
@@ -40,7 +40,7 @@ jobs:
             artifact: netwatch-windows-x64
             shell: cmd
             build: packaging\build_windows.bat
-          - name: macOS (Apple Silicon)
+          - name: macOS (Apple Silicon / ARM)
             os: macos-14
             artifact: netwatch-macos-arm64
             shell: bash
@@ -50,7 +50,7 @@ jobs:
             artifact: netwatch-linux-x86_64
             shell: bash
             build: bash packaging/build_linux.sh
-          # Intel 版 macOS（可选）：该镜像为实验性队列，失败不影响其它平台发布
+          # Intel 版 macOS（可选）：实验性镜像，失败不影响其它平台发布
           - name: macOS (Intel)
             os: macos-15-intel
             artifact: netwatch-macos-x86_64
@@ -86,15 +86,21 @@ jobs:
             dist/*.zip
             dist/*.tar.gz
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
   # ---------------------------------------------------------------------------
-  # 2. 打 tag 时创建 GitHub Release
+  # 2. 发布产物
+  #    - 推送 v* 标签  → 创建该版本号的正式 Release
+  #    - 推送 main     → 更新滚动版 Release「latest」，始终能下载到最新成品
   # ---------------------------------------------------------------------------
   release:
-    name: 创建 Release
+    name: 发布成品
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    if: >-
+      always() && needs.build.result != 'cancelled' &&
+      (startsWith(github.ref, 'refs/tags/v') ||
+       github.event_name == 'workflow_dispatch' ||
+       github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -154,22 +160,48 @@ jobs:
               print("CHANGELOG.md 中没有 %s 对应章节，将改用 GitHub 自动生成发布说明" % tag)
           PY
 
-      - name: 创建 GitHub Release
+      # ---- 正式版本（v* 标签） ------------------------------------------------
+      - name: 创建正式版本 Release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ github.ref_name }}
           TARGET: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [ -s release-notes.md ]; then
-            gh release create "$TAG" release/* \
-              --title "NetWatch $TAG" \
-              --notes-file release-notes.md \
-              --target "$TARGET"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+            gh release edit "$TAG" --title "NetWatch $TAG"
+          elif [ -s release-notes.md ]; then
+            gh release create "$TAG" release/* --title "NetWatch $TAG" --notes-file release-notes.md --target "$TARGET"
           else
-            gh release create "$TAG" release/* \
-              --title "NetWatch $TAG" \
-              --generate-notes \
-              --target "$TARGET"
+            gh release create "$TAG" release/* --title "NetWatch $TAG" --generate-notes --target "$TARGET"
           fi
-          echo "Release $TAG 创建完成"
+          echo "正式版本 Release $TAG 创建完成"
+
+      # ---- 滚动版（每次 push 到 main 都更新 latest） --------------------------
+      - name: 更新滚动版 Release（latest）
+        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET: ${{ github.sha }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          NOTES="由 ${SHA} 自动构建：Windows x64 / macOS Apple Silicon(ARM) / Linux x86_64。
+          下载对应压缩包后直接运行即可；使用说明见仓库 README。"
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest release/* --clobber
+            gh release edit latest --title "NetWatch 最新构建 (latest)" --notes "$NOTES"
+            echo "已更新滚动版 Release：latest"
+          else
+            gh release create latest release/* \
+              --target "$TARGET" \
+              --title "NetWatch 最新构建 (latest)" \
+              --notes "$NOTES"
+            echo "已创建滚动版 Release：latest"
+          fi
+          # 把 latest 标签移动到本次提交，保证"下载源码"也是最新代码
+          git tag -f latest "$TARGET"
+          git push -f origin latest
+          echo "latest 标签已指向 ${SHA}"
