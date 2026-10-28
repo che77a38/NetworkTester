@@ -1,0 +1,16 @@
+# NetWatch —— 构建与开发依赖
+#
+# 安装：
+#     python -m pip install -r requirements-dev.txt
+#
+# 说明：NetWatch 运行时只依赖 Python 标准库，下列依赖仅用于打包与本地开发。
+
+# 打包工具（必需）：生成 Windows / macOS / Linux 可执行程序
+pyinstaller>=6.0
+
+# 可选：系统托盘图标。缺失时 NetWatch 自动降级为「最小化到后台」运行
+pystray>=0.19
+
+# 可选：pytest 风格的测试工具。项目正式测试集使用标准库 unittest，
+#      引入 pytest 仅为方便本地按标记筛选用例
+pytest>=7.0

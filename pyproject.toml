@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netwatch"
+version = "1.0.0"
+description = "跨平台联网检测小工具：自定义检测目标、开机自启动、恢复联网时多通道通知（含企业微信机器人）"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "NetWatch Contributors" }]
+keywords = ["network", "monitor", "notification", "wecom", "wechat-work", "tkinter", "gui"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: MacOS",
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Site Management",
+    "Topic :: System :: Networking :: Monitoring",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# 托盘图标（可选，缺失时自动降级为「最小化到后台」）
+tray = ["pystray>=0.19", "Pillow>=9.0"]
+dev = ["pyinstaller>=6.0"]
+
+[project.urls]
+Homepage = "https://github.com/netwatch-tool/netwatch"
+Issues = "https://github.com/netwatch-tool/netwatch/issues"
+
+[project.gui-scripts]
+netwatch = "netwatch.main:main"
+
+[tool.setuptools]
+packages = ["netwatch"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+netwatch = ["py.typed"]

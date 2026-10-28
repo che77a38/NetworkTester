@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "手动发布时使用的版本号（例如 v1.0.0），留空则只构建产物"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. 三个平台并行构建
+  # ---------------------------------------------------------------------------
+  build:
+    name: 构建 · ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            artifact: netwatch-windows-x64
+            shell: cmd
+            build: packaging\build_windows.bat
+          - name: macOS (Apple Silicon)
+            os: macos-14
+            artifact: netwatch-macos-arm64
+            shell: bash
+            build: bash packaging/build_macos.sh
+          - name: Linux x86_64
+            os: ubuntu-22.04
+            artifact: netwatch-linux-x86_64
+            shell: bash
+            build: bash packaging/build_linux.sh
+          # 需要 Intel 版 macOS 时，取消下面一行的注释（GitHub 已提供 Intel 镜像）：
+          # - name: macOS (Intel)
+          #   os: macos-15-intel
+          #   artifact: netwatch-macos-x86_64
+          #   shell: bash
+          #   build: bash packaging/build_macos.sh
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装构建依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: 构建产物
+        shell: ${{ matrix.shell }}
+        run: ${{ matrix.build }}
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 2. 打 tag 时创建 GitHub Release
+  # ---------------------------------------------------------------------------
+  release:
+    name: 创建 Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 下载各平台构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 汇总发布文件
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp -f {} release/ \;
+          echo "---- 待发布文件 ----"
+          ls -lh release
+          if [ -z "$(ls -A release)" ]; then
+            echo "没有可发布的文件" >&2
+            exit 1
+          fi
+
+      - name: 生成 Release 说明
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          tag = os.environ.get("TAG", "").strip()
+          changelog = pathlib.Path("CHANGELOG.md")
+          notes = ""
+
+          if tag and changelog.is_file():
+              text = changelog.read_text(encoding="utf-8")
+              pattern = re.compile(r"^##\s+\[?%s\]?[^\n]*$" % re.escape(tag), re.MULTILINE)
+              match = pattern.search(text)
+              if match:
+                  start = match.end()
+                  nxt = re.search(r"^##\s+", text[start:], re.MULTILINE)
+                  end = start + nxt.start() if nxt else len(text)
+                  notes = text[start:end].strip()
+
+          out = pathlib.Path("release-notes.md")
+          out.unlink(missing_ok=True)
+          if notes:
+              out.write_text(notes + "\n", encoding="utf-8")
+              print("已从 CHANGELOG.md 提取 %s 的发布说明" % tag)
+          else:
+              print("CHANGELOG.md 中没有 %s 对应章节，将改用 GitHub 自动生成发布说明" % tag)
+          PY
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          TARGET: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -s release-notes.md ]; then
+            gh release create "$TAG" release/* \
+              --title "NetWatch $TAG" \
+              --notes-file release-notes.md \
+              --target "$TARGET"
+          else
+            gh release create "$TAG" release/* \
+              --title "NetWatch $TAG" \
+              --generate-notes \
+              --target "$TARGET"
+          fi
+          echo "Release $TAG 创建完成"
