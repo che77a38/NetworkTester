@@ -386,15 +386,23 @@ class Notifier:
             proc, error = _run_cmd([notify_send, "-a", "NetWatch", title, message])
             if not error and not _proc_failed(proc):
                 return ""
+            # 记录第一次尝试的失败原因，回退也失败时一并带出
+            first_error = error or _proc_stderr(proc)
+        else:
+            first_error = "未找到 notify-send"
+
         zenity = shutil.which("zenity")
         if zenity:
             proc, error = _run_cmd(
-                [zenity, "--notification", "--text", message, "--window-title", title]
+                ["zenity", "--notification", "--text", message, "--window-title", title]
             )
             if not error and not _proc_failed(proc):
                 return ""
-        return "未找到 notify-send 或 zenity，无法显示桌面通知"
+            second_error = error or _proc_stderr(proc)
+        else:
+            second_error = "未找到 zenity"
 
+        return "桌面通知失败：notify-send(%s)；zenity(%s)" % (first_error, second_error)
     # -- 系统声音 ----------------------------------------------------------
 
     def _send_sound(self, title: str, message: str) -> str:

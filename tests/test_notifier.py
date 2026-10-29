@@ -393,12 +393,18 @@ class NotifierRobustnessTest(unittest.TestCase):
     @mock.patch("subprocess.run")
     @mock.patch("urllib.request.urlopen")
     def test_notify_never_raises_when_channel_raises(self, mock_urlopen, mock_run):
+        """子进程调用失败时，桌面通道要记录失败原因而不是抛异常。
+
+        断言只要求"包含底层异常信息"，不绑定具体平台的提示文案，
+        这样在 macOS / Windows / Linux 上都能通过。
+        """
         mock_run.side_effect = OSError("no such command")
         config = make_config(channels={"desktop": True})
         results = Notifier(config).notify(make_event())
 
         self.assertNotEqual(results["desktop"], "ok")
-        self.assertIn("no such command", results["desktop"])
+        # 失败原因中应能看出是命令执行出错（各平台包装文案不同，只查关键字）
+        self.assertIn("no such command", results["desktop"].lower())
 
     @mock.patch("urllib.request.urlopen")
     def test_unconfigured_channel_is_skipped(self, mock_urlopen):

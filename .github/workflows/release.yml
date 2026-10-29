@@ -89,20 +89,14 @@ jobs:
           retention-days: 30
 
   # ---------------------------------------------------------------------------
-  # 2. 发布产物
-  #    - 推送 v* 标签  → 创建该版本号的正式 Release
-  #    - 推送 main     → 更新滚动版 Release「latest」，始终能下载到最新成品
+  # 2. 收集构建产物（供两个发布 job 复用）
   # ---------------------------------------------------------------------------
-  release:
-    name: 发布成品
+  collect:
+    name: 汇总产物
     needs: build
-    if: >-
-      always() && needs.build.result != 'cancelled' &&
-      (startsWith(github.ref, 'refs/tags/v') ||
-       github.event_name == 'workflow_dispatch' ||
-       github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    if: always()
 
     steps:
       - name: 检出代码
@@ -121,15 +115,45 @@ jobs:
           mkdir -p release
           find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp -f {} release/ \;
           echo "---- 待发布文件 ----"
-          ls -lh release
-          if [ -z "$(ls -A release)" ]; then
+          ls -lh release || true
+          if [ -z "$(ls -A release 2>/dev/null)" ]; then
             echo "没有可发布的文件" >&2
             exit 1
           fi
 
+      - name: 上传汇总产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # 3. 正式版本 Release（推送 v* 标签时）
+  # ---------------------------------------------------------------------------
+  release-tag:
+    name: 发布正式版本
+    needs: collect
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 下载汇总产物
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: release
+
       - name: 生成 Release 说明
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -160,9 +184,7 @@ jobs:
               print("CHANGELOG.md 中没有 %s 对应章节，将改用 GitHub 自动生成发布说明" % tag)
           PY
 
-      # ---- 正式版本（v* 标签） ------------------------------------------------
       - name: 创建正式版本 Release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
@@ -179,9 +201,29 @@ jobs:
           fi
           echo "正式版本 Release $TAG 创建完成"
 
-      # ---- 滚动版（每次 push 到 main 都更新 latest） --------------------------
+  # ---------------------------------------------------------------------------
+  # 4. 滚动版 Release（每次 push 到 main 都更新 latest）
+  # ---------------------------------------------------------------------------
+  release-latest:
+    name: 更新滚动版 latest
+    needs: collect
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 下载汇总产物
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: release
+
       - name: 更新滚动版 Release（latest）
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET: ${{ github.sha }}
