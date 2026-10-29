@@ -54,3 +54,4 @@ jobs:
 
       - name: 运行单元测试
         run: python -m unittest discover -s tests -v
+        timeout-minutes: 5

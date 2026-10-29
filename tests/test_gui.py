@@ -1,4 +1,9 @@
-"""GUI 冒烟测试（无图形环境时自动跳过）。"""
+"""GUI 冒烟测试。
+
+无图形环境时自动跳过；CI 环境（``CI=true``）同样跳过——CI runner 没有
+真实桌面会话，Windows runner 上 Tk 窗口的创建与销毁可能长时间挂起，
+拖垮整条流水线。GUI 的实际行为由发布产物在真实桌面环境验证。
+"""
 
 import os
 import sys
@@ -20,10 +25,15 @@ def _has_display() -> bool:
         return False
 
 
-HAS_DISPLAY = _has_display()
+#: CI 环境标识（GitHub Actions 会注入 CI=true）
+IS_CI = os.environ.get("CI", "").lower() in ("1", "true", "yes")
+
+HAS_DISPLAY = _has_display() and not IS_CI
 
 
-@unittest.skipUnless(HAS_DISPLAY, "当前环境没有可用的图形界面")
+@unittest.skipUnless(
+    HAS_DISPLAY, "当前环境没有可用的图形界面，或处于 CI 环境（跳过 GUI 冒烟测试）"
+)
 class GuiTestCase(unittest.TestCase):
     def setUp(self):
         from netwatch.gui import NetWatchApp
