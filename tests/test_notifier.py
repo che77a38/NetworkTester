@@ -390,14 +390,22 @@ class NotifierRobustnessTest(unittest.TestCase):
         self.assertEqual(results["dingtalk"], "ok")
         self.assertEqual(mock_urlopen.call_count, 2)
 
+    @mock.patch("netwatch.notifier.shutil.which")
     @mock.patch("subprocess.run")
     @mock.patch("urllib.request.urlopen")
-    def test_notify_never_raises_when_channel_raises(self, mock_urlopen, mock_run):
+    def test_notify_never_raises_when_channel_raises(
+        self, mock_urlopen, mock_run, mock_which
+    ):
         """子进程调用失败时，桌面通道要记录失败原因而不是抛异常。
+
+        需要同时 mock ``shutil.which``，让平台命令"看起来存在"，
+        否则 Linux 上会直接走"未找到 notify-send"分支而根本不会调用子进程，
+        测试前提就不成立了。
 
         断言只要求"包含底层异常信息"，不绑定具体平台的提示文案，
         这样在 macOS / Windows / Linux 上都能通过。
         """
+        mock_which.side_effect = lambda name: "/usr/bin/" + name
         mock_run.side_effect = OSError("no such command")
         config = make_config(channels={"desktop": True})
         results = Notifier(config).notify(make_event())
