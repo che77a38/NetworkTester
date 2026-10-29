@@ -60,6 +60,26 @@ Server酱、Telegram、SMTP 邮件、自定义 Webhook）发送提醒，支持�
 
 ## 快速开始
 
+### 直接下载成品（推荐）
+
+仓库的 **Releases** 页面提供编译好的成品，无需安装 Python：
+
+👉 <https://github.com/che77a38/NetworkTester/releases>
+
+| 平台 | 文件 | 说明 |
+|---|---|---|
+| macOS（Apple Silicon / ARM） | `netwatch-macos-arm64.zip` | 解压后得到 `netwatch.app`，双击运行即可 |
+| macOS（Intel） | `netwatch-macos-x86_64.zip` | Intel Mac 使用 |
+| Windows（64 位） | `netwatch-windows-x64.zip` | 解压后直接运行 `netwatch.exe` |
+| Linux（x86_64） | `netwatch-linux-x86_64.tar.gz` | 解压后运行 `netwatch` |
+
+> `latest` 是滚动版本：每次往 `main` 推送代码，GitHub Actions 都会重新编译并覆盖它，
+> 因此这里永远能拿到最新成品。需要带版本号的正式发布时，看页面上的 `v1.x.x` 标签。
+
+**macOS 首次运行提示**：由于未做代码签名，系统会提示"无法验证开发者"。
+请在 `系统设置 → 隐私与安全性` 中点"仍要打开"，或在
+`右键 → 打开` 对话框中确认一次。
+
 ### 环境要求
 
 - Python 3.8 或更高版本（开发与测试覆盖 3.9 – 3.12）
