@@ -38,23 +38,19 @@ jobs:
           - name: Windows x64
             os: windows-latest
             artifact: netwatch-windows-x64
-            shell: cmd
             build: packaging\build_windows.bat
           - name: macOS (Apple Silicon / ARM)
             os: macos-14
             artifact: netwatch-macos-arm64
-            shell: bash
             build: bash packaging/build_macos.sh
           - name: Linux x86_64
             os: ubuntu-22.04
             artifact: netwatch-linux-x86_64
-            shell: bash
             build: bash packaging/build_linux.sh
           # Intel 版 macOS（可选）：实验性镜像，失败不影响其它平台发布
           - name: macOS (Intel)
             os: macos-15-intel
             artifact: netwatch-macos-x86_64
-            shell: bash
             build: bash packaging/build_macos.sh
             experimental: true
 
@@ -74,8 +70,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
-      - name: 构建产物
-        shell: ${{ matrix.shell }}
+      # 注意：shell: 关键字不接受 matrix 上下文表达式（GitHub 会报
+      # "Unrecognized named-value: 'matrix'"），因此按 runner 系统分支选择。
+      - name: 构建产物（Windows）
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: ${{ matrix.build }}
+
+      - name: 构建产物（macOS / Linux）
+        if: runner.os != 'Windows'
+        shell: bash
         run: ${{ matrix.build }}
 
       - name: 上传构建产物
