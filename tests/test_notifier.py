@@ -453,12 +453,17 @@ class NotifierRobustnessTest(unittest.TestCase):
 
 
 class NotifierLocalChannelTest(unittest.TestCase):
-    """用例 7：本地通道（桌面通知 / 声音）调用系统命令。"""
+    """用例 7：本地通道（桌面通知 / 声音）调用系统命令。
 
+    这些用例**显式固定平台**（mock ``platform.system``），否则同一份代码在
+    Windows / macOS / Linux 上会走不同的分支，断言无法跨平台成立。
+    """
+
+    @mock.patch("netwatch.notifier.platform.system", return_value="Linux")
     @mock.patch("netwatch.notifier.shutil.which", return_value="/usr/bin/notify-send")
     @mock.patch("urllib.request.urlopen")
     @mock.patch("subprocess.run")
-    def test_desktop_calls_subprocess(self, mock_run, mock_urlopen, mock_which):
+    def test_desktop_calls_subprocess(self, mock_run, mock_urlopen, mock_which, mock_system):
         mock_run.return_value = mock.MagicMock(returncode=0)
         config = make_config(channels={"desktop": True})
         results = Notifier(config).notify(make_event(title="桌面标题", message="桌面正文"))
@@ -468,9 +473,10 @@ class NotifierLocalChannelTest(unittest.TestCase):
         # 桌面通知不应产生任何网络请求
         self.assertFalse(mock_urlopen.called)
 
+    @mock.patch("netwatch.notifier.platform.system", return_value="Linux")
     @mock.patch("netwatch.notifier.shutil.which", return_value="/usr/bin/paplay")
     @mock.patch("subprocess.run")
-    def test_sound_calls_subprocess(self, mock_run, mock_which):
+    def test_sound_calls_subprocess(self, mock_run, mock_which, mock_system):
         mock_run.return_value = mock.MagicMock(returncode=0)
         config = make_config(channels={"sound": True})
         results = Notifier(config).notify(make_event())
@@ -478,16 +484,58 @@ class NotifierLocalChannelTest(unittest.TestCase):
         self.assertTrue(mock_run.called)
         self.assertEqual(results.get("sound"), "ok")
 
+    @mock.patch("netwatch.notifier.platform.system", return_value="Linux")
     @mock.patch("netwatch.notifier.shutil.which", return_value=None)
     @mock.patch("subprocess.run")
-    def test_desktop_without_any_tool_reports_error(self, mock_run, mock_which):
+    def test_desktop_without_any_tool_reports_error(self, mock_run, mock_which, mock_system):
         mock_run.return_value = mock.MagicMock(returncode=0)
         config = make_config(channels={"desktop": True})
         results = Notifier(config).notify(make_event())
 
-        # Linux 上没有 notify-send / zenity 时必须报错，其它平台仍然正常
-        if results.get("desktop") != "ok":
-            self.assertIn("notify-send", results["desktop"])
+        # Linux 上没有 notify-send / zenity 时必须报错
+        self.assertNotEqual(results.get("desktop"), "ok")
+        self.assertIn("notify-send", results["desktop"])
+
+    @mock.patch("netwatch.notifier.platform.system", return_value="Windows")
+    @mock.patch("subprocess.run")
+    def test_desktop_windows_uses_powershell(self, mock_run, mock_system):
+        """Windows 桌面通知应调用 PowerShell。"""
+        mock_run.return_value = mock.MagicMock(returncode=0)
+        config = make_config(channels={"desktop": True})
+        results = Notifier(config).notify(make_event(title="标题", message="正文"))
+
+        self.assertEqual(results.get("desktop"), "ok")
+        self.assertTrue(mock_run.called)
+        cmd = mock_run.call_args[0][0]
+        joined = " ".join(cmd).lower()
+        self.assertIn("powershell", joined)
+        self.assertIn("notifyicon", joined)
+
+    @mock.patch("netwatch.notifier.platform.system", return_value="Windows")
+    @mock.patch("subprocess.run")
+    def test_sound_windows_uses_beep(self, mock_run, mock_system):
+        """Windows 提示音应调用 PowerShell 的 console beep。"""
+        mock_run.return_value = mock.MagicMock(returncode=0)
+        config = make_config(channels={"sound": True})
+        results = Notifier(config).notify(make_event())
+
+        self.assertEqual(results.get("sound"), "ok")
+        cmd = mock_run.call_args[0][0]
+        joined = " ".join(cmd).lower()
+        self.assertIn("powershell", joined)
+        self.assertIn("beep", joined)
+
+    @mock.patch("netwatch.notifier.platform.system", return_value="Darwin")
+    @mock.patch("subprocess.run")
+    def test_desktop_macos_uses_osascript(self, mock_run, mock_system):
+        """macOS 桌面通知应调用 osascript。"""
+        mock_run.return_value = mock.MagicMock(returncode=0)
+        config = make_config(channels={"desktop": True})
+        results = Notifier(config).notify(make_event(title="标题", message="正文"))
+
+        self.assertEqual(results.get("desktop"), "ok")
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("osascript", cmd)
 
 
 class NotifierLoggerTest(unittest.TestCase):
