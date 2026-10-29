@@ -25,6 +25,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _enable_utf8_stdout() -> None:
+    """让 Windows 控制台也能正常输出中文。
+
+    Windows 的默认代码页是 cp1252/cp936，直接 print 中文会抛
+    ``UnicodeEncodeError``。这里优先把标准输出切到 UTF-8；
+    若平台不支持（例如旧版 Windows 控制台），则忽略错误——
+    GUI 模式不依赖标准输出。
+    """
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def run_check(config_file: Optional[str] = None) -> int:
     """命令行单次检测，联网返回 0，断网返回 1。"""
     cfg = config_mod.load_config(config_mod.Path(config_file) if config_file else None)
@@ -47,6 +68,7 @@ def run_check(config_file: Optional[str] = None) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    _enable_utf8_stdout()
     parser = build_parser()
     args = parser.parse_args(argv)
 
