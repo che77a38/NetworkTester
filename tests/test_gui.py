@@ -30,7 +30,8 @@ class GuiTestCase(unittest.TestCase):
 
         self.tmp = tempfile.TemporaryDirectory()
         self.config_file = os.path.join(self.tmp.name, "config.json")
-        self.app = NetWatchApp(config_file=self.config_file)
+        # start_monitor=False：不启动监控线程，测试过程不发起真实网络探测
+        self.app = NetWatchApp(config_file=self.config_file, start_monitor=False)
         self.app.update_idletasks()
 
     def tearDown(self):
@@ -68,8 +69,9 @@ class GuiTestCase(unittest.TestCase):
         self.app._save(silent=True)
         self.assertTrue(os.path.exists(self.config_file))
 
-    def test_monitor_thread_alive(self):
-        self.assertTrue(self.app.monitor.is_alive())
+    def test_monitor_not_started_in_test_mode(self):
+        """测试模式下监控线程不运行，避免测试触发真实网络探测。"""
+        self.assertFalse(self.app.monitor.is_alive())
 
 
 if __name__ == "__main__":

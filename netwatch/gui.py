@@ -165,10 +165,35 @@ class Monitor(threading.Thread):
                 self._log("  [%s] %s" % (channel, status))
 
 
+class _IdleMonitor:
+    """不执行任何检测的空监控器。
+
+    仅用于单元测试：避免测试过程中发起真实网络探测，
+    让 CI（尤其是无外网或网络栈较慢的 runner）保持稳定。
+    """
+
+    def __init__(self, inner: Monitor) -> None:
+        self._inner = inner
+
+    def trigger(self) -> None:
+        """测试模式下忽略立即检测请求。"""
+
+    def stop(self) -> None:
+        self._inner.stop()
+
+    def is_alive(self) -> bool:
+        return False
+
+
 class NetWatchApp(tk.Tk):
     """主窗口。"""
 
-    def __init__(self, config_file: Optional[str] = None, minimized: bool = False) -> None:
+    def __init__(
+        self,
+        config_file: Optional[str] = None,
+        minimized: bool = False,
+        start_monitor: bool = True,
+    ) -> None:
         super().__init__()
         self.cfg = config_mod.load_config(config_mod.Path(config_file) if config_file else None)
         self.lang = self.cfg.get("language", "zh")
@@ -188,8 +213,12 @@ class NetWatchApp(tk.Tk):
         self._build_ui()
         self._load_config_to_ui()
 
+        # start_monitor=False 用于单元测试：避免测试过程发起真实网络探测
         self.monitor = Monitor(self._current_config, self._post, self._log)
-        self.monitor.start()
+        if start_monitor:
+            self.monitor.start()
+        else:
+            self.monitor = _IdleMonitor(self.monitor)
 
         self.after(200, self._drain_queue)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
